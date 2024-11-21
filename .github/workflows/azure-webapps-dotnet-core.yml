@@ -1,19 +1,19 @@
 name: Build and deploy ASP.Net Core app to Azure
 
 on:
-push:
+  push:
     branches: [ "Prod" ]
-  workflow_dispatch:
+  workflow_dispatch: # enables manual triggering in GitHub UI
 
-    env:
-      DOTNET_VERSION: 8.x.x
-      BUILD_CONFIGURATION: Release
-      PROJECT_PATH: ./ProductsService        # set this to the directory path of your project
-      PUBLISH_PATH: ./ProductsService
-      TESTRESULTS_PATH: ./test-results
-      AZURE_WEBAPP_NAME: KDLK-Test-Web-App  # set this to your Azure's app name
+env:
+  DOTNET_VERSION: 8.x.x
+  BUILD_CONFIGURATION: Release
+  PROJECT_PATH: ./ProductsService        # set this to the directory path of your project
+  PUBLISH_PATH: ./ProductsService
+  TESTRESULTS_PATH: ./test-results
+  AZURE_WEBAPP_NAME: KDLK-Test-Web-App  # set this to your Azure's app name
     
-    jobs:
+jobs:
     
       build:
         runs-on: ubuntu-latest
