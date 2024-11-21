@@ -18,7 +18,7 @@ builder.Services.AddDbContext<ProductDbContext>(options =>
       }
       else
       {
-            var cs = builder.Configuration.GetConnectionString("CommentsContext");
+            var cs = builder.Configuration.GetConnectionString("ProductsDBConnectionString");
             options.UseSqlServer(cs);
       }
 });
