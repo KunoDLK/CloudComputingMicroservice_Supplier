@@ -49,9 +49,12 @@ using (var scope = app.Services.CreateScope())
       if (builder.Environment.IsDevelopment())
       {
             db.Database.EnsureDeleted();
+            db.Database.EnsureCreated();
       }
-      db.Database.EnsureCreated();
-      db.Database.Migrate();
+      else
+      {
+            db.Database.Migrate();
+      }
 
 }
 

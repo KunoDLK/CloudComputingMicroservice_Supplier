@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Products_Service.Data;
 using LaMaCo.Comments.Api.Data;
 using Microsoft.AspNetCore.Authorization;
+using Polly;
+using Polly.CircuitBreaker;
+using System.Collections.Concurrent;
 
 namespace Products_Service.Controllers
 {
@@ -10,31 +13,98 @@ namespace Products_Service.Controllers
       [ApiController]
       public class Products : ControllerBase
       {
+            private const int CacheItemExpiryTimeMinuets = 10;
             private readonly ProductDbContext _db;
+            private readonly ConcurrentDictionary<int, (Product Product, DateTime CachedTime)> _cache = new();
+            private readonly AsyncCircuitBreakerPolicy _circuitBreakerPolicy;
 
             public Products(ProductDbContext dbContexts)
             {
                   _db = dbContexts;
+
+                  // Configure Polly Circuit Breaker
+                  _circuitBreakerPolicy = Policy
+                      .Handle<Exception>() // Handle any exception
+                      .CircuitBreakerAsync(
+                          exceptionsAllowedBeforeBreaking: 2, // Number of exceptions before breaking the circuit
+                          durationOfBreak: TimeSpan.FromSeconds(30), // Duration of circuit break
+                          onBreak: (exception, breakDelay) =>
+                          {
+                                Console.WriteLine($"Circuit broken! Exception: {exception.Message}");
+                          },
+                          onReset: () =>
+                          {
+                                Console.WriteLine("Circuit reset!");
+                          },
+                          onHalfOpen: () =>
+                          {
+                                Console.WriteLine("Circuit in half-open state.");
+                          });
             }
 
-            // GET: api/Products
+            // GET: api/Products/{searchTerm}
             [HttpGet]
             [Authorize]
-            public ActionResult<IEnumerable<Product>> GetProducts()
+            public ActionResult<IEnumerable<Product>> GetProducts(string searchTerm)
             {
-                  return _db.Products.ToList();
+                  // Check if the search term is null or empty
+                  if (string.IsNullOrEmpty(searchTerm))
+                  {
+                        // If no search term is provided, return the first "ItemLimit" products
+                        var products = _db.Products.Take(100).ToList();
+                        return Ok(products);
+                  }
+                  else
+                  {
+                        // Convert both the search term and product name to lowercase for case-insensitive comparison
+                        var filteredProducts = _db.Products
+                            .Where(p => p.Name.ToLower().Contains(searchTerm.ToLower()))
+                            .Take(100) // Limit the results to the specified item limit
+                            .ToList();
+
+                        if (filteredProducts.Count < 100)
+                        {
+                              filteredProducts.AddRange(_db.Products
+                            .Where(p => p.Description.ToLower().Contains(searchTerm.ToLower()))
+                            .Take(100 - filteredProducts.Count) // Limit the results to the specified item limit
+                            .ToList());
+                        }
+
+                        return Ok(filteredProducts);
+                  }
             }
 
-            // GET: api/Products/5
+            /// GET: api/Products/5
             [HttpGet("{id}")]
             [Authorize]
             public ActionResult<Product> GetProductById(int id)
             {
+                  // Check if the product is present in the cache
+                  if (_cache.TryGetValue(id, out var cachedEntry))
+                  {
+                        // Check if the cached entry is still valid (e.g., not expired)
+                        var cacheExpirationTime = TimeSpan.FromMinutes(5); // Set cache expiration time as needed
+                        if (DateTime.UtcNow - cachedEntry.CachedTime <= cacheExpirationTime)
+                        {
+                              return cachedEntry.Product; // Return product from cache
+                        }
+                        else
+                        {
+                              // If cached data is expired, remove it from the cache
+                              _cache.TryRemove(id, out _);
+                        }
+                  }
+
+                  // If not in cache or if cache is expired, query the database
                   var product = _db.Products.Find(id);
                   if (product == null)
                   {
                         return NotFound();
                   }
+
+                  // Add the product to the cache with the current timestamp
+                  _cache[id] = (product, DateTime.UtcNow);
+
                   return product;
             }
 
@@ -68,7 +138,7 @@ namespace Products_Service.Controllers
                   // Update fields
                   productInDb.Name = product.Name;
                   productInDb.Price = product.Price;
-                  
+
                   try
                   {
                         _db.SaveChanges();
