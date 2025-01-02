@@ -59,7 +59,16 @@ namespace Products_Service.Controllers
                         return BadRequest();
                   }
 
-                  _db.Entry(product).State = EntityState.Modified;
+                  var productInDb = _db.Products.FirstOrDefault(p => p.Id == id);
+                  if (productInDb == null)
+                  {
+                        return NotFound();
+                  }
+
+                  // Update fields
+                  productInDb.Name = product.Name;
+                  productInDb.Price = product.Price;
+                  
                   try
                   {
                         _db.SaveChanges();
