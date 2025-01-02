@@ -1,4 +1,5 @@
 using LaMaCo.Comments.Api.Data;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Products_Service.Controllers;
 
@@ -29,6 +30,17 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddAuthentication(options =>
+       {
+             options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+             options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+       }).AddJwtBearer(options =>
+       {
+             options.Authority = Environment.GetEnvironmentVariable("Authority");
+             options.Audience = Environment.GetEnvironmentVariable("Audience");
+       });
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -50,9 +62,17 @@ if (app.Environment.IsDevelopment())
       app.UseSwaggerUI();
 }
 
-
+app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+if (app.Environment.IsProduction())
+{
+      app.MapControllers();
+}
+else
+{
+      // Disable authentication for development
+      app.MapControllers().AllowAnonymous();
+}
 
 app.Run();
