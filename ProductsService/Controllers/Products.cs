@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Products_Service.Data;
 using LaMaCo.Comments.Api.Data;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Products_Service.Controllers
 {
@@ -18,6 +19,7 @@ namespace Products_Service.Controllers
 
             // GET: api/Products
             [HttpGet]
+            [Authorize]
             public ActionResult<IEnumerable<Product>> GetProducts()
             {
                   return _db.Products.ToList();
@@ -25,6 +27,7 @@ namespace Products_Service.Controllers
 
             // GET: api/Products/5
             [HttpGet("{id}")]
+            [Authorize]
             public ActionResult<Product> GetProductById(int id)
             {
                   var product = _db.Products.Find(id);
@@ -37,6 +40,7 @@ namespace Products_Service.Controllers
 
             // POST: api/Products
             [HttpPost]
+            [Authorize]
             public ActionResult<Product> CreateProduct(Product product)
             {
                   _db.Products.Add(product);
@@ -47,6 +51,7 @@ namespace Products_Service.Controllers
 
             // PUT: api/Products/5
             [HttpPut("{id}")]
+            [Authorize]
             public IActionResult UpdateProduct(int id, Product product)
             {
                   if (id != product.Id)
@@ -54,7 +59,16 @@ namespace Products_Service.Controllers
                         return BadRequest();
                   }
 
-                  _db.Entry(product).State = EntityState.Modified;
+                  var productInDb = _db.Products.FirstOrDefault(p => p.Id == id);
+                  if (productInDb == null)
+                  {
+                        return NotFound();
+                  }
+
+                  // Update fields
+                  productInDb.Name = product.Name;
+                  productInDb.Price = product.Price;
+                  
                   try
                   {
                         _db.SaveChanges();
@@ -76,6 +90,7 @@ namespace Products_Service.Controllers
 
             // DELETE: api/Products/5
             [HttpDelete("{id}")]
+            [Authorize]
             public IActionResult DeleteProduct(int id)
             {
                   var product = _db.Products.Find(id);
