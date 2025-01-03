@@ -1,30 +1,18 @@
 using System;
 using System.Collections.Generic;
-using Microsoft.AspNetCore.Razor.Language;
-using NuGet.Packaging.Signing;
 
 public class CacheItem<T>
 {
     public T Item { get; set; }
-
     public DateTime CachedTime { get; set; } = DateTime.UtcNow;
 }
 
 public class OverwritingCircularQueue<T>
 {
     private CacheItem<T>[] RawItems { get; set; }
-    private TimeSpan CacheTime;
-    private int _head;
-    private int _tail;
-
-    public TimeSpan CachedItems
-    {
-        get
-        {
-            //TODO return items between head and tail
-            return null; //TEMP
-        }
-    }
+    private readonly TimeSpan CacheTime;
+    private int _head; // Points to the most recently added item
+    private int _tail; // Points to the oldest item
 
     public OverwritingCircularQueue(int capacity, TimeSpan cacheTime)
     {
@@ -33,41 +21,84 @@ public class OverwritingCircularQueue<T>
             throw new ArgumentException("Capacity must be greater than 0.", nameof(capacity));
         }
 
-        if (cacheTime.TotalSeconds > 0)
+        if (cacheTime.TotalSeconds <= 0)
         {
-            throw new ArgumentException("Cache Timeout needs to be longer then 0 seconds", nameof(cacheTime));
+            throw new ArgumentException("Cache timeout must be greater than 0 seconds.", nameof(cacheTime));
         }
 
-        RawItems = new T[capacity];
-        _head = 0;
-        _tail = 0;
-
-        //TODO: Start thread that will sit at the tail of the circular queue wait
+        RawItems = new CacheItem<T>[capacity];
+        CacheTime = cacheTime;
+        _head = -1; // Indicates that no item has been added yet
+        _tail = 0;  // Points to the first item to be overwritten
     }
 
     public void Enqueue(T item)
     {
-        if (_head == RawItems.Length - 1)
+        // Move the head pointer to the next slot
+        _head = (_head + 1) % RawItems.Length;
+
+        // Add the new cache item at the head position
+        RawItems[_head] = new CacheItem<T> { Item = item, CachedTime = DateTime.UtcNow };
+
+        // If the queue is full (head catches up with tail), move the tail to the next position
+        if (_head == _tail)
         {
-            // Overwrite the oldest item
-            _head = 0;
+            _tail = (_tail + 1) % RawItems.Length;
         }
-        else
+    }
+
+    public IList<T> GetCachedItems()
+    {
+        var result = new List<T>();
+
+        // Traverse from tail to head, collecting non-expired items
+        int index = _tail;
+        while (true)
         {
-            _head++;
-        }
+            var currentItem = RawItems[index];
 
-        RawItems[_head] = new CacheItem<T>();
-        RawItems[_head].Item = item;
-
-        if (_tail == _head)
-        {
-            _tail = _head + 1;
-
-            if (_head == RawItems.Length - 1)
+            if (currentItem != null && (DateTime.UtcNow - currentItem.CachedTime) <= CacheTime)
             {
-                _tail = 0;
+                result.Add(currentItem.Item);
             }
+
+            if (index == _head)
+            {
+                break;
+            }
+
+            index = (index + 1) % RawItems.Length; // Move to the next item in circular fashion
+        }
+
+        return result;
+    }
+
+    public int Count
+    {
+        get
+        {
+            int count = 0;
+
+            // Traverse from tail to head, counting non-expired items
+            int index = _tail;
+            while (true)
+            {
+                var currentItem = RawItems[index];
+
+                if (currentItem != null && (DateTime.UtcNow - currentItem.CachedTime) <= CacheTime)
+                {
+                    count++;
+                }
+
+                if (index == _head)
+                {
+                    break;
+                }
+
+                index = (index + 1) % RawItems.Length; // Move to the next item in circular fashion
+            }
+
+            return count;
         }
     }
 }
