@@ -6,9 +6,12 @@ using Microsoft.AspNetCore.Authorization;
 using Polly;
 using Polly.CircuitBreaker;
 using System.Collections.Concurrent;
+using NuGet.Common;
 
 namespace Products_Service.Controllers
 {
+     
+
       [Route("api/[controller]")]
       [ApiController]
       public class Products : ControllerBase
@@ -17,7 +20,7 @@ namespace Products_Service.Controllers
             private const int MaximumCachedItems = 1000;
             private const int MaximumGetItemCount = 10;
             private readonly ProductDbContext _db;
-            private readonly ConcurrentDictionary<int, (Product Product, DateTime CachedTime)> _cache = new();
+            private readonly OverwritingCircularQueue<Product> _cache = new(MaximumCachedItems);
             private readonly AsyncCircuitBreakerPolicy _circuitBreakerPolicy;
 
             public Products(ProductDbContext dbContexts)
@@ -54,7 +57,7 @@ namespace Products_Service.Controllers
                   // Check if the search term is null or empty
                   if (string.IsNullOrEmpty(searchTerm))
                   {
-                        returnProducts = (IEnumerable<Product>)_cache.Take(MaximumGetItemCount).ToList();
+                        returnProducts = (IEnumerable<Product>)_cache.Items.Take(MaximumGetItemCount).ToList();
 
                         if (returnProducts.Count() < 100)
                         {
