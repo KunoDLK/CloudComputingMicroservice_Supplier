@@ -3,6 +3,7 @@ using System.Collections.Generic;
 
 public class CacheItem<T>
 {
+    public int Id { get; set; }
     public T Item { get; set; }
     public DateTime CachedTime { get; set; } = DateTime.UtcNow;
 }
@@ -28,23 +29,24 @@ public class OverwritingCircularQueue<T>
 
         RawItems = new CacheItem<T>[capacity];
         CacheTime = cacheTime;
-        _head = -1; // Indicates that no item has been added yet
+        _head = 0; // Indicates that no item has been added yet
         _tail = 0;  // Points to the first item to be overwritten
     }
 
-    public void Enqueue(T item)
+    public void Enqueue(int id, T item)
     {
+        int index = Array.FindIndex(RawItems, x => (x != null) && (x.Id == id));
+        if (index != -1)
+        {
+            RawItems[index] = null; // Set the item in the array to null
+        }
+
+        // Add the new cache item at the head position
+        RawItems[_head] = new CacheItem<T> { Id = id, Item = item, CachedTime = DateTime.UtcNow };
+
         // Move the head pointer to the next slot
         _head = (_head + 1) % RawItems.Length;
 
-        // Add the new cache item at the head position
-        RawItems[_head] = new CacheItem<T> { Item = item, CachedTime = DateTime.UtcNow };
-
-        // If the queue is full (head catches up with tail), move the tail to the next position
-        if (_head == _tail)
-        {
-            _tail = (_tail + 1) % RawItems.Length;
-        }
     }
 
     public IList<T> GetCachedItems()
@@ -60,6 +62,11 @@ public class OverwritingCircularQueue<T>
             if (currentItem != null && (DateTime.UtcNow - currentItem.CachedTime) <= CacheTime)
             {
                 result.Add(currentItem.Item);
+            }
+
+            if (currentItem != null && (DateTime.UtcNow - currentItem.CachedTime) >= CacheTime)
+            {
+                _tail++; // move tail to "remove" outdated items 
             }
 
             if (index == _head)

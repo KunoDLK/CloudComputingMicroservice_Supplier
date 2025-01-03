@@ -7,10 +7,11 @@ using Polly;
 using Polly.CircuitBreaker;
 using System.Collections.Concurrent;
 using NuGet.Common;
+using System.Data.Common;
 
 namespace Products_Service.Controllers
 {
-     
+
 
       [Route("api/[controller]")]
       [ApiController]
@@ -20,7 +21,7 @@ namespace Products_Service.Controllers
             private const int MaximumCachedItems = 1000;
             private const int MaximumGetItemCount = 10;
             private readonly ProductDbContext _db;
-            private readonly OverwritingCircularQueue<Product> _cache = new(MaximumCachedItems);
+            private readonly OverwritingCircularQueue<Product> _cache = new(MaximumCachedItems, TimeSpan.FromMinutes(CacheItemExpiryTimeMinutes));
             private readonly AsyncCircuitBreakerPolicy _circuitBreakerPolicy;
 
             public Products(ProductDbContext dbContexts)
@@ -50,94 +51,158 @@ namespace Products_Service.Controllers
             // GET: api/Products/{searchTerm}
             [HttpGet]
             [Authorize]
-            public async ActionResult<IEnumerable<Product>> GetProducts(string searchTerm)
+            public async Task<ActionResult<IEnumerable<Product>>> GetProducts(string searchTerm)
             {
-                  IEnumerable<Product> returnProducts;
+                  bool circuitBroken = false;
+                  List<Product> returnProducts = new();
+                  List<Product> DBProducts;
+                  List<Product> cachedProducts;
 
                   // Check if the search term is null or empty
                   if (string.IsNullOrEmpty(searchTerm))
                   {
-                        returnProducts = (IEnumerable<Product>)_cache.Items.Take(MaximumGetItemCount).ToList();
+                        cachedProducts = _cache.GetCachedItems().Take(MaximumGetItemCount).ToList();
+                        returnProducts.AddRange(cachedProducts);
 
-                        if (returnProducts.Count() < 100)
+                        if (cachedProducts.Count() < MaximumGetItemCount)
                         {
-                              await _circuitBreakerPolicy.ExecuteAsync(async () =>
+                              try
                               {
-                                    // If no search term is provided, return the first "ItemLimit" products
-                                    returnProducts = _db.Products.Take(MaximumGetItemCount).ToList();
-                              });
-                        }
 
-                        if (returnProducts.Count() > 0)
-                        {
-                              return Ok(returnProducts);
-                        }
-                        else
-                        {
-                              if (_circuitBreakerPolicy.CircuitState != CircuitState.Open)
+                                    await _circuitBreakerPolicy.ExecuteAsync(async () =>
+                                    {
+                                          // If no search term is provided, return the first "ItemLimit" products
+                                          DBProducts = _db.Products.Take(MaximumGetItemCount).ToList();
+
+                                          foreach (var item in DBProducts)
+                                          {
+                                                _cache.Enqueue(item.Id, item);
+                                          }
+
+                                          returnProducts.Clear();
+                                          returnProducts.AddRange(DBProducts);
+                                    });
+                              }
+                              catch (BrokenCircuitException ex)
                               {
-                                    return StatusCode(503, "Service is temporarily unavailable. Please try again later.");
+                                    circuitBroken = true;
+                                    // Proceed
                               }
                         }
                   }
                   else
                   {
-                        await _circuitBreakerPolicy.ExecuteAsync(async () =>
-                        {
-                              // Convert both the search term and product name to lowercase for case-insensitive comparison
-                              IEnumerable<Product> filteredProducts = _db.Products
-                                    .Where(p => p.Name.ToLower().Contains(searchTerm.ToLower()))
-                                    .Take(100) // Limit the results to the specified item limit
-                                    .ToList();
-                        });
+                        cachedProducts = _cache.GetCachedItems().Where(p => p.Name.ToLower().Contains(searchTerm.ToLower()) || p.Description.ToLower().Contains(searchTerm.ToLower()))
+                                                            .Take(MaximumGetItemCount) // Limit the results to the specified item limit
+                                                            .ToList();
+                        returnProducts.AddRange(cachedProducts);
 
-                        if (filteredProducts.Count < 100)
+                        if (cachedProducts.Count() < MaximumGetItemCount)
                         {
-                              await _circuitBreakerPolicy.ExecuteAsync(async () =>
+                              try
                               {
-                                    filteredProducts.AddRange(_db.Products
-                                          .Where(p => p.Description.ToLower().Contains(searchTerm.ToLower()))
-                                          .Take(100 - filteredProducts.Count) // Limit the results to the specified item limit
-                                          .ToList());
-                              });
-                        }
 
-                        return Ok(filteredProducts);
+                                    await _circuitBreakerPolicy.ExecuteAsync(async () =>
+                                    {
+
+                                          DBProducts = _db.Products
+                                                .Where(p => p.Name.ToLower().Contains(searchTerm.ToLower()))
+                                                .Take(MaximumGetItemCount) // Limit the results to the specified item limit
+                                                .ToList();
+
+                                          foreach (var item in DBProducts)
+                                          {
+                                                _cache.Enqueue(item.Id, item);
+                                          }
+
+                                          returnProducts.Clear();
+                                          returnProducts.AddRange(DBProducts);
+
+                                          if (cachedProducts.Count() < MaximumGetItemCount)
+                                          {
+
+                                                DBProducts = _db.Products
+                                                      .Where(p => (!(p.Name.ToLower().Contains(searchTerm.ToLower()))) && (p.Description.ToLower().Contains(searchTerm.ToLower())))
+                                                      .Take(MaximumGetItemCount - returnProducts.Count()) // Limit the results to the specified item limit
+                                                      .ToList();
+
+                                                foreach (var item in DBProducts)
+                                                {
+                                                      _cache.Enqueue(item.Id, item);
+                                                }
+
+                                                returnProducts.AddRange(DBProducts);
+                                          }
+                                    });
+                              }
+                              catch (BrokenCircuitException ex)
+                              {
+                                    circuitBroken = true;
+                                    // Proceed
+                              }
+                        }
+                  }
+
+                  if (returnProducts.Count() > 0 && circuitBroken)
+                  {
+                        return StatusCode(503, "Service is temporarily unavailable. Please try again later.");
+                  }
+                  else
+                  {
+                        // Even if database is broken if we got item to return pretend everything is okay
+                        // Humans get upset if they have to wait...
+                        return Ok(returnProducts);
                   }
             }
 
             /// GET: api/Products/5
             [HttpGet("{id}")]
             [Authorize]
-            public ActionResult<Product> GetProductById(int id)
+            public async Task<ActionResult<Product>> GetProductById(int id)
             {
-                  // Check if the product is present in the cache
-                  if (_cache.TryGetValue(id, out var cachedEntry))
+                  bool circuitBroken = false;
+                  Product? returnProduct = null;
+
+                  // Check if the product is in the cache
+                  returnProduct = _cache.GetCachedItems().FirstOrDefault(x => x.Id == id);
+
+                  if (returnProduct == null)
                   {
-                        // Check if the cached entry is still valid (e.g., not expired)
-                        var cacheExpirationTime = TimeSpan.FromMinutes(CacheItemExpiryTimeMinutes); // Set cache expiration time as needed
-                        if (DateTime.UtcNow - cachedEntry.CachedTime <= cacheExpirationTime)
+                        try
                         {
-                              return cachedEntry.Product; // Return product from cache
+                              // Attempt to retrieve the product from the database using the circuit breaker policy
+                              await _circuitBreakerPolicy.ExecuteAsync(async () =>
+                              {
+                                    returnProduct = _db.Products.FirstOrDefault(p => p.Id == id);
+
+                                    if (returnProduct != null)
+                                    {
+                                          // Add the retrieved product to the cache
+                                          _cache.Enqueue(returnProduct.Id, returnProduct);
+                                    }
+                              });
                         }
-                        else
+                        catch (BrokenCircuitException ex)
                         {
-                              // If cached data is expired, remove it from the cache
-                              _cache.TryRemove(id, out _);
+                              circuitBroken = true;
                         }
                   }
 
-                  // If not in cache or if cache is expired, query the database
-                  var product = _db.Products.Find(id);
-                  if (product == null)
+                  if (returnProduct == null && circuitBroken)
                   {
-                        return NotFound();
+                        // If the product is not found and the circuit breaker is open, respond with 503
+                        return StatusCode(503, "Service is temporarily unavailable. Please try again later.");
                   }
-
-                  // Add the product to the cache with the current timestamp
-                  _cache[id] = (product, DateTime.UtcNow);
-
-                  return product;
+                  else if (returnProduct == null)
+                  {
+                        // If the product is not found (even after fallback), return 404
+                        return NotFound($"Product with ID {id} not found.");
+                  }
+                  else
+                  {
+                        // Return the product as a successful response
+                        return Ok(returnProduct);
+                  }
             }
 
             // POST: api/Products
