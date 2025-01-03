@@ -13,7 +13,9 @@ namespace Products_Service.Controllers
       [ApiController]
       public class Products : ControllerBase
       {
-            private const int CacheItemExpiryTimeMinuets = 10;
+            private const int CacheItemExpiryTimeMinutes = 10;
+            private const int MaximumCachedItems = 1000;
+            private const int MaximumGetItemCount = 10;
             private readonly ProductDbContext _db;
             private readonly ConcurrentDictionary<int, (Product Product, DateTime CachedTime)> _cache = new();
             private readonly AsyncCircuitBreakerPolicy _circuitBreakerPolicy;
@@ -26,8 +28,8 @@ namespace Products_Service.Controllers
                   _circuitBreakerPolicy = Policy
                       .Handle<Exception>() // Handle any exception
                       .CircuitBreakerAsync(
-                          exceptionsAllowedBeforeBreaking: 2, // Number of exceptions before breaking the circuit
-                          durationOfBreak: TimeSpan.FromSeconds(30), // Duration of circuit break
+                          exceptionsAllowedBeforeBreaking: 5, // Number of exceptions before breaking the circuit
+                          durationOfBreak: TimeSpan.FromSeconds(5), // Duration of circuit break
                           onBreak: (exception, breakDelay) =>
                           {
                                 Console.WriteLine($"Circuit broken! Exception: {exception.Message}");
@@ -45,29 +47,56 @@ namespace Products_Service.Controllers
             // GET: api/Products/{searchTerm}
             [HttpGet]
             [Authorize]
-            public ActionResult<IEnumerable<Product>> GetProducts(string searchTerm)
+            public async ActionResult<IEnumerable<Product>> GetProducts(string searchTerm)
             {
+                  IEnumerable<Product> returnProducts;
+
                   // Check if the search term is null or empty
                   if (string.IsNullOrEmpty(searchTerm))
                   {
-                        // If no search term is provided, return the first "ItemLimit" products
-                        var products = _db.Products.Take(100).ToList();
-                        return Ok(products);
+                        returnProducts = (IEnumerable<Product>)_cache.Take(MaximumGetItemCount).ToList();
+
+                        if (returnProducts.Count() < 100)
+                        {
+                              await _circuitBreakerPolicy.ExecuteAsync(async () =>
+                              {
+                                    // If no search term is provided, return the first "ItemLimit" products
+                                    returnProducts = _db.Products.Take(MaximumGetItemCount).ToList();
+                              });
+                        }
+
+                        if (returnProducts.Count() > 0)
+                        {
+                              return Ok(returnProducts);
+                        }
+                        else
+                        {
+                              if (_circuitBreakerPolicy.CircuitState != CircuitState.Open)
+                              {
+                                    return StatusCode(503, "Service is temporarily unavailable. Please try again later.");
+                              }
+                        }
                   }
                   else
                   {
-                        // Convert both the search term and product name to lowercase for case-insensitive comparison
-                        var filteredProducts = _db.Products
-                            .Where(p => p.Name.ToLower().Contains(searchTerm.ToLower()))
-                            .Take(100) // Limit the results to the specified item limit
-                            .ToList();
+                        await _circuitBreakerPolicy.ExecuteAsync(async () =>
+                        {
+                              // Convert both the search term and product name to lowercase for case-insensitive comparison
+                              IEnumerable<Product> filteredProducts = _db.Products
+                                    .Where(p => p.Name.ToLower().Contains(searchTerm.ToLower()))
+                                    .Take(100) // Limit the results to the specified item limit
+                                    .ToList();
+                        });
 
                         if (filteredProducts.Count < 100)
                         {
-                              filteredProducts.AddRange(_db.Products
-                            .Where(p => p.Description.ToLower().Contains(searchTerm.ToLower()))
-                            .Take(100 - filteredProducts.Count) // Limit the results to the specified item limit
-                            .ToList());
+                              await _circuitBreakerPolicy.ExecuteAsync(async () =>
+                              {
+                                    filteredProducts.AddRange(_db.Products
+                                          .Where(p => p.Description.ToLower().Contains(searchTerm.ToLower()))
+                                          .Take(100 - filteredProducts.Count) // Limit the results to the specified item limit
+                                          .ToList());
+                              });
                         }
 
                         return Ok(filteredProducts);
@@ -83,7 +112,7 @@ namespace Products_Service.Controllers
                   if (_cache.TryGetValue(id, out var cachedEntry))
                   {
                         // Check if the cached entry is still valid (e.g., not expired)
-                        var cacheExpirationTime = TimeSpan.FromMinutes(5); // Set cache expiration time as needed
+                        var cacheExpirationTime = TimeSpan.FromMinutes(CacheItemExpiryTimeMinutes); // Set cache expiration time as needed
                         if (DateTime.UtcNow - cachedEntry.CachedTime <= cacheExpirationTime)
                         {
                               return cachedEntry.Product; // Return product from cache
