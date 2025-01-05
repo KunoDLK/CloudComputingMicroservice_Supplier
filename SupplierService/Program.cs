@@ -19,7 +19,7 @@ builder.Services.AddDbContext<ProductDbContext>(options =>
       }
       else
       {
-            var cs = builder.Configuration.GetConnectionString("ProductsDBConnectionString");
+            var cs = builder.Configuration.GetConnectionString("SuppliersDBConnectionString");
             options.UseSqlServer(cs);
       }
 });
@@ -49,10 +49,12 @@ using (var scope = app.Services.CreateScope())
       if (builder.Environment.IsDevelopment())
       {
             db.Database.EnsureDeleted();
+            db.Database.EnsureCreated();
       }
-      db.Database.EnsureCreated();
-      db.Database.Migrate();
-
+      else
+      {
+            db.Database.Migrate();
+      }
 }
 
 // Configure the HTTP request pipeline.
