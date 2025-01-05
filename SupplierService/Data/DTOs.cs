@@ -21,4 +21,6 @@ namespace Products_Service.Data
 
                 public int AvailableStock { get; set; }
         }
+
+        
 }
