@@ -53,7 +53,7 @@ using (var scope = app.Services.CreateScope())
       }
       else
       {
-            db.Database.Migrate();
+      db.Database.Migrate();
       }
 
 }
