@@ -5,27 +5,27 @@ using Products_Service.Supplier.Implementation;
 
 namespace Products_Service.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/Supplier")]
     [ApiController]
-    public class SupplierController : ControllerBase 
+    public class SupplierController : ControllerBase
     {
         private readonly ProductDbContext _db;
 
-        private Dictionary<SupplierSources, IProductSupplier> Suppliers { get; set; }
+        private List<IProductSupplier> Suppliers { get; }
 
         public SupplierController(ProductDbContext dbContexts)
         {
             _db = dbContexts;
 
-            Suppliers = new Dictionary<SupplierSources, IProductSupplier>
+            Suppliers = new List<IProductSupplier>
             {
-                { SupplierSources.TestMockSuppliers, new MockProductSupplier() } 
+                 new MockProductSupplier(SupplierSources.TestMockSuppliers)
             };
         }
 
         // GET: api/Supplier
         [HttpGet]
-        public IActionResult GetProducts() 
+        public IActionResult GetProduct(int ProductId)
         {
             return Ok();
         }
