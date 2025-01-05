@@ -9,7 +9,7 @@ env:
   DOTNET_VERSION: 8.x.x
   BUILD_CONFIGURATION: Release
   PROJECT_PATH: ./SupplierService        # set this to the directory path of your project
-  PUBLISH_PATH: ./SupplierService
+  PUBLISH_PATH: ./Deploy
   TESTRESULTS_PATH: ./test-results
   AZURE_WEBAPP_NAME: Suppliers  # set this to your Azure's app name
     
@@ -73,4 +73,4 @@ jobs:
             with: 
               app-name: ${{ env.AZURE_WEBAPP_NAME }}
               publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE  }} # Define secret in GitHub with contents of Publish Profile
-              package: ${{ env.PUBLISH_PATH }}/*
+              package: ${{ env.PUBLISH_PATH }}
