@@ -1,17 +1,26 @@
 namespace Products_Service.Supplier.Implementation
 {
-        class MockProductSupplier : IProductSupplier
+      class MockProductSupplier : ProductSupplier
+    {
+        public MockProductSupplier(SupplierSources supplierSources) : base(supplierSources)
         {
-                public decimal PriceCheck(int SupplierId)
-                {
-                        if (SupplierId == 1)
-                        {
-                                return new decimal(10.2);
-                        }
-                        else
-                        {
-                                throw new ArgumentException("Unknown Item");
-                        }
-                }
         }
+        
+        public override int AvailableStock(int SupplierId)
+        {
+            return GenerateDeterministicValue(SupplierId, 0, 10000);
+        }
+
+        public override decimal PriceCheck(int SupplierId)
+        {
+            var price = GenerateDeterministicValue(SupplierId, 0, 5000) / 100m; // Scale to 0-50 range
+            return price;
+        }
+
+        private int GenerateDeterministicValue(int seed, int min, int max)
+        {
+            var random = new Random((int)SupplierSource * seed); // Deterministic random based on seed
+            return random.Next(min, max + 1);
+        }
+    }
 }
