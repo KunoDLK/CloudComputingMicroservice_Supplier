@@ -6,7 +6,7 @@ using Products_Service.Controllers;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddDbContext<ProductDbContext>(options =>
+builder.Services.AddDbContext<SupplierDbContext>(options =>
 {
       if (builder.Environment.IsDevelopment())
       {
@@ -45,7 +45,7 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-      var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
+      var db = scope.ServiceProvider.GetRequiredService<SupplierDbContext>();
       if (builder.Environment.IsDevelopment())
       {
             db.Database.EnsureDeleted();

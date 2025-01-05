@@ -11,9 +11,9 @@ namespace Products_Service.Controllers
     [ApiController]
     public class SupplierCheckController : ControllerBase
     {
-        private readonly ProductDbContext _db;
+        private readonly SupplierDbContext _db;
 
-        public SupplierCheckController(ProductDbContext dbContexts)
+        public SupplierCheckController(SupplierDbContext dbContexts)
         {
             _db = dbContexts;
         }
