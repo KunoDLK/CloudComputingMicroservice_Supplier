@@ -8,8 +8,8 @@ on:
 env:
   DOTNET_VERSION: 8.x.x
   BUILD_CONFIGURATION: Release
-  PROJECT_PATH: ./ProductsService        # set this to the directory path of your project
-  PUBLISH_PATH: ./ProductsService
+  PROJECT_PATH: ./SupplierService        # set this to the directory path of your project
+  PUBLISH_PATH: ./SupplierService
   TESTRESULTS_PATH: ./test-results
   AZURE_WEBAPP_NAME: KDLK-Test-Web-App  # set this to your Azure's app name
     
