@@ -11,7 +11,7 @@ env:
   PROJECT_PATH: ./SupplierService        # set this to the directory path of your project
   PUBLISH_PATH: ./SupplierService
   TESTRESULTS_PATH: ./test-results
-  AZURE_WEBAPP_NAME: KDLK-Test-Web-App  # set this to your Azure's app name
+  AZURE_WEBAPP_NAME: Suppliers  # set this to your Azure's app name
     
 jobs:
     
