@@ -19,7 +19,7 @@ builder.Services.AddDbContext<ProductDbContext>(options =>
       }
       else
       {
-            var cs = builder.Configuration.GetConnectionString("ProductsDBConnectionString");
+            var cs = builder.Configuration.GetConnectionString("SuppliersDBConnectionString");
             options.UseSqlServer(cs);
       }
 });
