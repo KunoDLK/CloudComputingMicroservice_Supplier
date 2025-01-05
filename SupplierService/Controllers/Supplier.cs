@@ -19,9 +19,9 @@ namespace Products_Service.Controllers
     [ApiController]
     public class SupplierController : ControllerBase
     {
-        private readonly ProductDbContext _db;
+        private readonly SupplierDbContext _db;
 
-        public SupplierController(ProductDbContext dbContexts)
+        public SupplierController(SupplierDbContext dbContexts)
         {
             _db = dbContexts;
         }

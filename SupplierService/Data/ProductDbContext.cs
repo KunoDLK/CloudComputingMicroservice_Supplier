@@ -4,11 +4,11 @@ using Products_Service.Data;
 
 namespace LaMaCo.Comments.Api.Data;
 
-public class ProductDbContext : DbContext
+public class SupplierDbContext : DbContext
 {
       public DbSet<SupplierProduct> SupplierProducts { get; set; } = null!;
 
-      public ProductDbContext(DbContextOptions<ProductDbContext> options)
+      public SupplierDbContext(DbContextOptions<SupplierDbContext> options)
           : base(options)
       {
       }

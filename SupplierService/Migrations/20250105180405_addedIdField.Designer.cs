@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace SupplierService.Migrations
 {
-    [DbContext(typeof(ProductDbContext))]
+    [DbContext(typeof(SupplierDbContext))]
     [Migration("20250105180405_addedIdField")]
     partial class addedIdField
     {
