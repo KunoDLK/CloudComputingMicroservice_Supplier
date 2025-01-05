@@ -6,7 +6,7 @@ namespace LaMaCo.Comments.Api.Data;
 
 public class ProductDbContext : DbContext
 {
-      public DbSet<SupplierProduct> SupplierProduct { get; set; } = null!;
+      public DbSet<SupplierProduct> SupplierProducts { get; set; } = null!;
 
       public ProductDbContext(DbContextOptions<ProductDbContext> options)
           : base(options)
