@@ -51,8 +51,8 @@ using (var scope = app.Services.CreateScope())
             db.Database.EnsureDeleted();
       }
 
+      db.Database.EnsureCreated();
       db.Database.Migrate();
-
 }
 
 // Configure the HTTP request pipeline.
